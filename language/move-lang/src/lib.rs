@@ -225,6 +225,8 @@ pub fn move_parse(
     Ok((files, result))
 }
 
+/// Given a set of dependencies, precompile them and save the ASTs so that they can be used again
+/// to compile against without having to recompile these dependencies
 pub fn move_construct_pre_compiled_lib(
     deps: &[String],
     sender_opt: Option<Address>,
@@ -609,7 +611,7 @@ fn run(
     pre_compiled_lib: Option<&FullyCompiledProgram>,
     cur: PassResult,
     until: Pass,
-    mut result_check: impl FnMut(&PassResult) -> (),
+    mut result_check: impl FnMut(&PassResult),
 ) -> Result<PassResult, Errors> {
     result_check(&cur);
     if cur.equivalent_pass() >= until {
