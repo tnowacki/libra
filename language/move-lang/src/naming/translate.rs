@@ -8,6 +8,7 @@ use crate::{
     parser::ast::{ConstantName, Field, FunctionName, Kind, Kind_, ModuleIdent, StructName, Var},
     shared::{unique_map::UniqueMap, *},
     typing::core::{self, Subst},
+    FullyCompiledProgram,
 };
 use move_ir_types::location::*;
 use std::collections::BTreeMap;
@@ -45,11 +46,27 @@ struct Context {
 }
 
 impl Context {
-    fn new(prog: &E::Program, errors: Errors) -> Self {
+    fn new(
+        pre_compiled_lib: Option<&FullyCompiledProgram>,
+        prog: &E::Program,
+        errors: Errors,
+    ) -> Self {
         use ResolvedType as RT;
-        let scoped_types = prog
-            .modules
-            .key_cloned_iter()
+        let all_modules = || {
+            prog.modules.key_cloned_iter().chain(
+                pre_compiled_lib
+                    .iter()
+                    .map(|pre_compiled| {
+                        pre_compiled
+                            .expansion
+                            .modules
+                            .key_cloned_iter()
+                            .filter(|(mident, _m)| !prog.modules.contains_key(mident))
+                    })
+                    .flatten(),
+            )
+        };
+        let scoped_types = all_modules()
             .map(|(mident, mdef)| {
                 let mems = mdef
                     .structs
@@ -64,9 +81,7 @@ impl Context {
                 (mident, mems)
             })
             .collect();
-        let scoped_functions = prog
-            .modules
-            .key_cloned_iter()
+        let scoped_functions = all_modules()
             .map(|(mident, mdef)| {
                 let mems = mdef
                     .functions
@@ -76,9 +91,7 @@ impl Context {
                 (mident, mems)
             })
             .collect();
-        let scoped_constants = prog
-            .modules
-            .key_cloned_iter()
+        let scoped_constants = all_modules()
             .map(|(mident, mdef)| {
                 let mems = mdef
                     .constants
@@ -314,10 +327,18 @@ impl Context {
 // Entry
 //**************************************************************************************************
 
-pub fn program(prog: E::Program, errors: Errors) -> (N::Program, Errors) {
-    let mut context = Context::new(&prog, errors);
-    let mut modules = modules(&mut context, prog.modules);
-    let scripts = scripts(&mut context, prog.scripts);
+pub fn program(
+    pre_compiled_lib: Option<&FullyCompiledProgram>,
+    prog: E::Program,
+    errors: Errors,
+) -> (N::Program, Errors) {
+    let mut context = Context::new(pre_compiled_lib, &prog, errors);
+    let E::Program {
+        modules: emodules,
+        scripts: escripts,
+    } = prog;
+    let mut modules = modules(&mut context, emodules);
+    let scripts = scripts(&mut context, escripts);
     super::uses::verify(&mut context.errors, &mut modules);
     (N::Program { modules, scripts }, context.get_errors())
 }

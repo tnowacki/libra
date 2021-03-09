@@ -12,6 +12,7 @@ use crate::{
     hlir::ast::{self as H, Label},
     parser::ast::{ConstantName, FunctionName, ModuleIdent, StructName, Var},
     shared::unique_map::UniqueMap,
+    FullyCompiledProgram,
 };
 use diem_types::account_address::AccountAddress as DiemAddress;
 use move_core_types::value::MoveValue;
@@ -39,7 +40,7 @@ struct Context {
 }
 
 impl Context {
-    pub fn new(_prog: &H::Program, errors: Errors) -> Self {
+    pub fn new(errors: Errors) -> Self {
         Context {
             errors,
             next_label: None,
@@ -128,10 +129,18 @@ impl Context {
 // Entry
 //**************************************************************************************************
 
-pub fn program(errors: Errors, prog: H::Program) -> (G::Program, Errors) {
-    let mut context = Context::new(&prog, errors);
-    let modules = modules(&mut context, prog.modules);
-    let scripts = scripts(&mut context, prog.scripts);
+pub fn program(
+    _pre_compiled_lib: Option<&FullyCompiledProgram>,
+    errors: Errors,
+    prog: H::Program,
+) -> (G::Program, Errors) {
+    let mut context = Context::new(errors);
+    let H::Program {
+        modules: hmodules,
+        scripts: hscripts,
+    } = prog;
+    let modules = modules(&mut context, hmodules);
+    let scripts = scripts(&mut context, hscripts);
 
     (G::Program { modules, scripts }, context.get_errors())
 }
